@@ -41,7 +41,19 @@ def run_bot():
 
 Thread(target=run_bot).start()
 
+# Remove the Threading part and just use this at the bottom:
 if __name__ == "__main__":
-    # This part is only used for local testing
+    # Start the bot in non-blocking mode
+    bot.remove_webhook() # This clears any stuck connections
+    
+    # Run the Flask app
+    # Note: On Render, you can't easily run polling and Flask 
+    # in the same process without threads, so if you keep threads, 
+    # make sure they are 'daemon' threads.
+    
+    thread = Thread(target=lambda: bot.infinity_polling(skip_pending=True))
+    thread.daemon = True # This ensures the bot dies when the app stops
+    thread.start()
+    
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
