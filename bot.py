@@ -1,17 +1,19 @@
 import os
 import telebot
-import requests  # To send data to Google Sheets
+import requests
 from flask import Flask
+from threading import Thread
 
 # 1. Setup
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-SHEET_URL = os.getenv("GOOGLE_SHEET_WEBAPP_URL") # Your Apps Script URL
+SHEET_URL = os.getenv("GOOGLE_SHEET_WEBAPP_URL")
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 @app.route('/')
-def ping(): return "Bot is Active", 200
+def ping(): 
+    return "Bot is Active", 200
 
 @bot.message_handler(commands=['post'])
 def handle_post(message):
@@ -20,7 +22,6 @@ def handle_post(message):
 
 def send_to_sheets(message):
     try:
-        # Split user input
         parts = message.text.split(',')
         payload = {
             "user": f"@{message.from_user.username}",
@@ -29,23 +30,18 @@ def send_to_sheets(message):
             "qty": parts[2].strip(),
             "pincode": parts[3].strip()
         }
-        
-        # Send to Google Sheet Webhook
         response = requests.post(SHEET_URL, json=payload)
-        
-        if response.status_code == 200:
-            bot.reply_to(message, "✅ Data saved to Google Sheets & Map!")
-        else:
-            bot.reply_to(message, "❌ Sheet Error.")
-            
+        bot.reply_to(message, "✅ Data saved to Sheets & Map!")
     except Exception as e:
         bot.reply_to(message, "❌ Use format: Type, Grade, Qty, Pincode")
 
+# This starts the bot in the background when the web server starts
+def run_bot():
+    bot.infinity_polling() # FIXED TYPO HERE
+
+Thread(target=run_bot).start()
+
 if __name__ == "__main__":
-    from threading import Thread
-    # Corrected name: infinity_polling
-    Thread(target=bot.infinity_polling, daemon=True).start()
-    
-    # Render needs this Flask app to stay alive
-    port = int(os.environ.get("PORT", 5000))
+    # This part is only used for local testing
+    port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
