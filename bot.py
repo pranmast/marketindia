@@ -4,42 +4,34 @@ import requests
 from flask import Flask
 from threading import Thread
 
-# --- Config ---
+# --- Configuration ---
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 SHEET_URL = os.getenv("GOOGLE_SHEET_WEBAPP_URL")
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
+# Flask health check for Render
 @app.route('/')
 def index():
-    return "Bot is running", 200
+    return "Bot is Active", 200
 
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    instructions = (
-        "Welcome to Market India! 🥥\n\n"
-        "To post, send a message with details in this order (one per line):\n"
-        "1. Buy or Sell\n"
-        "2. Grade (e.g. W320)\n"
-        "3. Quantity (kg)\n"
-        "4. Pincode\n"
-        "5. Phone Number\n"
-        "6. GST Number"
-    )
-    bot.reply_to(message, instructions)
+# Original Simple Logic
+@bot.message_handler(commands=['start'])
+def welcome(message):
+    bot.reply_to(message, "Send your post in this format (one per line):\n\nBuy/Sell\nGrade\nQuantity\nPincode\nContact\nGST")
 
 @bot.message_handler(func=lambda message: True)
-def handle_all_messages(message):
-    # Split the message by lines
-    lines = message.text.splitlines()
+def process_post(message):
+    # Split text into lines
+    lines = message.text.split('\n')
     
-    # Check if we have at least 6 lines of data
+    # We need at least 6 pieces of info
     if len(lines) < 6:
-        bot.reply_to(message, "❌ Please provide all 6 details, each on a NEW line.")
+        bot.reply_to(message, "❌ Please provide 6 lines:\n1. Type\n2. Grade\n3. Qty\n4. Pin\n5. Phone\n6. GST")
         return
 
-    # Map the lines to variables
+    # Map directly to your Sheet structure
     payload = {
         "user": f"@{message.from_user.username or message.from_user.first_name}",
         "type": lines[0].strip(),
@@ -51,19 +43,24 @@ def handle_all_messages(message):
     }
 
     try:
-        response = requests.post(SHEET_URL, json=payload, timeout=10)
-        if response.status_code == 200:
-            bot.reply_to(message, "✅ Successfully posted to Market India Sheet!")
-        else:
-            bot.reply_to(message, "⚠️ Failed to save. Check Google Script.")
+        # Send to Google Script
+        requests.post(SHEET_URL, json=payload, timeout=10)
+        bot.reply_to(message, "✅ Data sent to Sheet!")
     except Exception as e:
-        bot.reply_to(message, f"❌ Error: {str(e)}")
+        bot.reply_to(message, "❌ Sheet Error. Check script URL.")
 
-# --- Polling Logic ---
+# --- The "Anti-Crash" Polling ---
 def run_bot():
     bot.remove_webhook()
+    print("Bot started polling...")
     bot.infinity_polling(skip_pending=True)
 
 if __name__ == "__main__":
-    Thread(target=run_bot, daemon=True).start()
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    # Start bot thread
+    t = Thread(target=run_bot)
+    t.daemon = True
+    t.start()
+    
+    # Run Flask
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
