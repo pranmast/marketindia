@@ -137,15 +137,19 @@ def get_gst(message):
 # --- Threading & Execution ---
 
 def run_bot():
-    bot.remove_webhook()
-    bot.infinity_polling(skip_pending=True)
+    try:
+        print("Removing old webhooks...")
+        bot.remove_webhook()
+        print("Bot starting in polling mode...")
+        # skip_pending=True ensures the bot doesn't reply to 100 old messages at once
+        bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=30)
+    except Exception as e:
+        print(f"Polling Error: {e}")
 
 if __name__ == "__main__":
-    # Start bot thread
-    bot_thread = Thread(target=run_bot)
-    bot_thread.daemon = True
+    # Use a 'daemon' thread so it dies when the Flask server stops
+    bot_thread = Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
-    # Start Flask server
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
